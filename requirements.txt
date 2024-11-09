@@ -1,0 +1,8 @@
+google-generativeai
+pandas
+plotly
+polygon-client
+py-vollib
+streamlit
+yfinance
+python-dotenv
