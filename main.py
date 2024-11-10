@@ -1,15 +1,15 @@
 import os
-import google.generativeai as genai
-import streamlit as st
-import pandas as pd
+import google.generativeai as generativeai
+import streamlit as streamlit
+import pandas as pandas
 from polygon.rest import RESTClient
 from polygon import exceptions as polygon_exceptions
-import yfinance as yf
+import yfinance as yfinance
 from py_vollib.black_scholes import black_scholes
 from py_vollib.black_scholes.greeks.analytical import delta, gamma, vega, theta
 from datetime import datetime, timedelta
 import logging
-import plotly.graph_objects as go
+import plotly.graph_objects as plotly_graph_objects
 from plotly.subplots import make_subplots
 from stock_ai_analysis import StockAIAnalyst
 
@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 # --- Hide Streamlit Components ---
-st.set_page_config(page_title="Stock Analysis App", layout="wide")
+streamlit.set_page_config(page_title="Stock Analysis App", layout="wide")
 hide_streamlit_style = """
 <style>
     #MainMenu {visibility: hidden;}
@@ -80,7 +80,7 @@ hide_streamlit_style = """
     }
 </style>
 """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+streamlit.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # --- Input Validation ---
 def validate_stock_symbol(symbol):
@@ -105,8 +105,8 @@ def get_api_key(key_name):
             
         # Only try secrets as fallback if available
         try:
-            if hasattr(st, "secrets") and key_name in st.secrets:
-                return st.secrets[key_name]
+            if hasattr(streamlit, "secrets") and key_name in streamlit.secrets:
+                return streamlit.secrets[key_name]
         except Exception:
             pass  # Ignore secrets-related errors
             
@@ -126,8 +126,8 @@ def initialize_apis():
         gemini_api_key = get_api_key("GEMINI_API_KEY")
         
         if not polygon_api_key or not gemini_api_key:
-            st.error("Missing required API keys. Please check environment variables.")
-            st.stop()
+            streamlit.error("Missing required API keys. Please check environment variables.")
+            streamlit.stop()
             
         # Initialize clients
         polygon_client = RESTClient(api_key=polygon_api_key)
@@ -136,15 +136,15 @@ def initialize_apis():
         return polygon_client, ai_analyst
         
     except Exception as e:
-        st.error(f"Failed to initialize APIs: {str(e)}")
-        st.stop()
+        streamlit.error(f"Failed to initialize APIs: {str(e)}")
+        streamlit.stop()
 
 # --- Stock Data Functions ---
 def search_stock_symbol(company_name):
     if not company_name.strip():
         return None
     try:
-        ticker = yf.Ticker(company_name)
+        ticker = yfinance.Ticker(company_name)
         info = ticker.info
         return ticker.ticker if info else None
     except Exception as e:
@@ -155,7 +155,7 @@ def get_stock_details(symbol):
     if not symbol.strip():
         return None
     try:
-        ticker = yf.Ticker(symbol)
+        ticker = yfinance.Ticker(symbol)
         info = ticker.info
         return info if info else None
     except Exception as e:
@@ -200,8 +200,8 @@ def get_historical_data(client, symbol, start_date, end_date, timeframe):
             logger.warning(f"Empty dataset returned for {symbol}")
             return None
             
-        df = pd.DataFrame(data)
-        df['date'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df = pandas.DataFrame(data)
+        df['date'] = pandas.to_datetime(df['timestamp'], unit='ms')
         return df
         
     except Exception as e:
@@ -210,7 +210,7 @@ def get_historical_data(client, symbol, start_date, end_date, timeframe):
 
 def get_option_greeks(symbol):
     try:
-        ticker = yf.Ticker(symbol)
+        ticker = yfinance.Ticker(symbol)
         options = ticker.options
         
         if not options:
@@ -251,7 +251,7 @@ def create_combined_chart(df, symbol):
     )
 
     fig.add_trace(
-        go.Candlestick(
+        plotly_graph_objects.Candlestick(
             x=df['date'],
             open=df['open'],
             high=df['high'],
@@ -263,7 +263,7 @@ def create_combined_chart(df, symbol):
     )
 
     fig.add_trace(
-        go.Bar(x=df['date'], y=df['volume'], name='Volume'),
+        plotly_graph_objects.Bar(x=df['date'], y=df['volume'], name='Volume'),
         row=2, col=1
     )
 
@@ -285,32 +285,32 @@ def main():
     polygon_client, ai_analyst = initialize_apis()
     
     # Create tabs
-    tab1, tab2 = st.tabs(["Analysis", "Settings"])
+    tab1, tab2 = streamlit.tabs(["Analysis", "Settings"])
     
     with tab1:
-        st.title("Stock Analysis Application")
+        streamlit.title("Stock Analysis Application")
         
         # Search and Input
-        col1, col2 = st.columns(2)
+        col1, col2 = streamlit.columns(2)
         with col1: 
-            company_name = st.text_input("Enter company name to search for symbol").strip()
+            company_name = streamlit.text_input("Enter company name to search for symbol").strip()
             if company_name and not company_name.replace(' ', '').isalnum():
-                st.warning("Please enter a valid company name (letters and numbers only)")
+                streamlit.warning("Please enter a valid company name (letters and numbers only)")
                 company_name = None
 
         with col2:
-            symbol = st.text_input("Enter a stock symbol", "AAPL")
+            symbol = streamlit.text_input("Enter a stock symbol", "AAPL")
             
         # Analysis Parameters
-        col3, col4 = st.columns(2)
+        col3, col4 = streamlit.columns(2)
         with col3:
-            date_range = st.selectbox(
+            date_range = streamlit.selectbox(
                 "Select Date Range",
                 ["1 Day", "3 Days", "1 Month", "3 Months", "1 Year"]
             )
             
         with col4:
-            timeframe = st.selectbox(
+            timeframe = streamlit.selectbox(
                 "Select Timeframe for Graph",
                 ["1 Minute", "5 Minutes", "15 Minutes", "30 Minutes", "1 Hour", "1 Day"]
             )
@@ -327,111 +327,120 @@ def main():
         start_date = end_date - date_mapping[date_range]
         
         # Analysis Button
-        if st.button("Analyze Stock"):
+        if streamlit.button("Analyze Stock"):
             valid_symbol = validate_stock_symbol(symbol)
             if not valid_symbol:
-                st.error("Please enter a stock symbol.")
+                streamlit.error("Please enter a stock symbol.")
                 return
                 
-            with st.spinner("Analyzing stock data..."):
+            with streamlit.spinner("Analyzing stock data..."):
                 try:
                     # Fetch all data
                     details = get_stock_details(valid_symbol)
                     if not details:
-                        st.error(f"Could not fetch stock details for {valid_symbol}")
+                        streamlit.error(f"Could not fetch stock details for {valid_symbol}")
                         return
                         
                     historical_data = get_historical_data(polygon_client, valid_symbol, start_date, end_date, timeframe)
                     if historical_data is None or historical_data.empty:
-                        st.error(f"No historical data available for {valid_symbol}")
+                        streamlit.error(f"No historical data available for {valid_symbol}")
                         return
                         
                     greeks = get_option_greeks(valid_symbol)
                     if not greeks:
-                        st.warning("Options data not available - showing limited analysis")
+                        streamlit.warning("Options data not available - showing limited analysis")
                     
                     # Proceed with analysis if we have the minimum required data
                     if details and not historical_data.empty:
                         # Display results
-                        st.subheader("Stock Details")
-                        col5, col6, col7, col8 = st.columns(4)
+                        streamlit.subheader("Stock Details")
+                        col5, col6, col7, col8 = streamlit.columns(4)
                         with col5:
-                            st.metric("Symbol", details.get('symbol', 'N/A'))
+                            streamlit.metric("Symbol", details.get('symbol', 'N/A'))
                         with col6:
-                            st.metric("Company", details.get('longName', 'N/A'))
+                            streamlit.metric("Company", details.get('longName', 'N/A'))
                         with col7:
-                            st.metric("Market Cap", f"${details.get('marketCap', 0):,.0f}")
+                            streamlit.metric("Market Cap", f"${details.get('marketCap', 0):,.0f}")
                         with col8:
-                            st.metric("Exchange", details.get('exchange', 'N/A'))
+                            streamlit.metric("Exchange", details.get('exchange', 'N/A'))
                         
-                        st.subheader("Historical Data Analysis")
+                        streamlit.subheader("Historical Data Analysis")
                         fig = create_combined_chart(historical_data, valid_symbol)
-                        st.plotly_chart(fig, use_container_width=True)
+                        streamlit.plotly_chart(fig, use_container_width=True)
                         
-                        col9, col10 = st.columns(2)
+                        col9, col10 = streamlit.columns(2)
                         with col9:
-                            st.subheader("Basic Statistics")
-                            st.write(historical_data['close'].describe())
+                            streamlit.subheader("Basic Statistics")
+                            streamlit.write(historical_data['close'].describe())
                             
                         with col10:
-                            st.subheader("Option Greeks")
-                            st.write(f"Delta: {greeks['delta']:.4f}")
-                            st.write(f"Gamma: {greeks['gamma']:.4f}")
-                            st.write(f"Theta: {greeks['theta']:.4f}")
-                            st.write(f"Vega: {greeks['vega']:.4f}")
+                            streamlit.subheader("Option Greeks")
+                            streamlit.write(f"Delta: {greeks['delta']:.4f}")
+                            streamlit.write(f"Gamma: {greeks['gamma']:.4f}")
+                            streamlit.write(f"Theta: {greeks['theta']:.4f}")
+                            streamlit.write(f"Vega: {greeks['vega']:.4f}")
                         
-                        # AI Analysis
-                        if st.button("Generate AI Analysis"):
-                            with st.spinner("Generating AI analysis..."):
-                                try:
+                        # Create a unique key for the AI analysis button
+                        ai_button_key = f"ai_analysis_{valid_symbol}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        
+                        # Initialize session state for AI analysis
+                        if 'ai_analysis_result' not in streamlit.session_state:
+                            streamlit.session_state.ai_analysis_result = None
+                        
+                        if streamlit.button("Generate AI Analysis", key=ai_button_key):
+                            try:
+                                with streamlit.spinner('🤖 AI is analyzing the stock data...'):
                                     ai_analysis = ai_analyst.analyze_stock(
                                         valid_symbol,
                                         details,
                                         historical_data,
                                         greeks
                                     )
-                                    if ai_analysis:
-                                        st.markdown("<div class='ai-analysis'>", unsafe_allow_html=True)
-                                        st.subheader("AI-Generated Stock Analysis")
-                                        st.markdown(ai_analysis)
-                                        st.markdown("</div>", unsafe_allow_html=True)
-                                    else:
-                                        st.error("Failed to generate AI analysis.")
-                                except Exception as e:
-                                    logger.error(f"AI analysis error: {e}", exc_info=True)
-                                    st.error(f"Error generating AI analysis: {str(e)}")
+                                    streamlit.session_state.ai_analysis_result = ai_analysis
+                            
+                            except Exception as e:
+                                logger.error(f"AI analysis error: {e}", exc_info=True)
+                                streamlit.error(f"Error generating AI analysis: {str(e)}")
+                                streamlit.session_state.ai_analysis_result = None
+                        
+                        # Display AI analysis if available
+                        if streamlit.session_state.ai_analysis_result:
+                            streamlit.markdown("<div class='ai-analysis'>", unsafe_allow_html=True)
+                            streamlit.subheader("🤖 AI-Generated Stock Analysis")
+                            streamlit.markdown(streamlit.session_state.ai_analysis_result)
+                            streamlit.markdown("</div>", unsafe_allow_html=True)
                         
                         # Download button
                         csv = historical_data.to_csv(index=False)
-                        st.download_button(
+                        streamlit.download_button(
                             label="Download Historical Data as CSV",
                             data=csv,
                             file_name=f"{valid_symbol}_historical_data.csv",
                             mime="text/csv",
                         )
                     else:
-                        st.warning("Insufficient data to perform complete analysis.")
+                        streamlit.warning("Insufficient data to perform complete analysis.")
                         
                 except Exception as e:
                     logger.error(f"Analysis error: {e}", exc_info=True)
-                    st.error(f"An error occurred during analysis: {str(e)}")
+                    streamlit.error(f"An error occurred during analysis: {str(e)}")
     
     with tab2:
-        st.header("Settings & Information")
-        st.write("This application uses data from:")
-        st.write("- Polygon.io for real-time market data")
-        st.write("- yfinance for additional stock information")
-        st.write("- Google's Gemini for AI-powered analysis")
+        streamlit.header("Settings & Information")
+        streamlit.write("This application uses data from:")
+        streamlit.write("- Polygon.io for real-time market data")
+        streamlit.write("- yfinance for additional stock information")
+        streamlit.write("- Google's Gemini for AI-powered analysis")
         
-        st.subheader("API Configuration")
-        st.write("Ensure you have the following environment variables set:")
-        st.code("""
+        streamlit.subheader("API Configuration")
+        streamlit.write("Ensure you have the following environment variables set:")
+        streamlit.code("""
         POLYGON_API_KEY=your_polygon_api_key
         GEMINI_API_KEY=your_gemini_api_key
         """)
         
-        st.subheader("Data Usage")
-        st.write("Please ensure you comply with the terms of service of all data providers.")
+        streamlit.subheader("Data Usage")
+        streamlit.write("Please ensure you comply with the terms of service of all data providers.")
 
 if __name__ == "__main__":
     main()

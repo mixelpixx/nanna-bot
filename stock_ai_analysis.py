@@ -1,7 +1,7 @@
 # stock_ai_analysis.py
 
 import logging
-import google.generativeai as genai
+import google.generativeai as generative_ai
 from datetime import datetime
 
 # Setup logging
@@ -23,14 +23,14 @@ class StockAIAnalyst:
             "max_output_tokens": 8192,
         }
         try:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel(
+            generative_ai.configure(api_key=api_key)
+            self.model = generative_ai.GenerativeModel(
                 model_name="gemini-1.5-pro",
                 generation_config=self.generation_config
             )
             self._test_connection()
-        except Exception as e:
-            logger.error(f"Failed to initialize Gemini API: {e}")
+        except Exception as exception:
+            logger.error(f"Failed to initialize Gemini API: {exception}")
             raise
 
     def _test_connection(self):
@@ -39,8 +39,8 @@ class StockAIAnalyst:
             response = self.model.generate_content("Test connection")
             if not response:
                 raise Exception("No response from Gemini API")
-        except Exception as e:
-            logger.error(f"Connection test failed: {e}")
+        except Exception as exception:
+            logger.error(f"Connection test failed: {exception}")
             raise
 
     def format_data_for_analysis(self, symbol, details, historical_data, greeks):
@@ -49,7 +49,7 @@ class StockAIAnalyst:
             recent_data = historical_data.tail(5).to_dict(orient='records')
             current_price = historical_data['close'].iloc[-1]
             price_change = (historical_data['close'].iloc[-1] - historical_data['close'].iloc[0]) / historical_data['close'].iloc[0] * 100
-            volume_avg = historical_data['volume'].mean()
+            volume_average = historical_data['volume'].mean()
             
             return f"""
             Stock Analysis Request for {symbol}
@@ -62,7 +62,7 @@ class StockAIAnalyst:
             
             Recent Performance:
             - Price Change: {price_change:.2f}%
-            - Average Volume: {volume_avg:,.0f}
+            - Average Volume: {volume_average:,.0f}
             
             Technical Indicators:
             - 5-day High: ${historical_data['high'].tail(5).max():.2f}
@@ -83,8 +83,9 @@ class StockAIAnalyst:
             3. Key Risks and Opportunities
             4. Short-term and Long-term Outlook
             """
-        except Exception as e:
-            logger.error(f"Error formatting data: {e}")
+        except Exception as exception:
+            logger.error(f"Error formatting data: {exception}")
+            logger.debug(f"Data formatting failed with details: {str(exception)}")
             raise
 
     def analyze_stock(self, symbol, details, historical_data, greeks):
@@ -102,16 +103,19 @@ class StockAIAnalyst:
         """
         try:
             # Format the data
+            logger.debug(f"Starting AI analysis for {symbol}")
             prompt = self.format_data_for_analysis(symbol, details, historical_data, greeks)
             
             # Get analysis from AI
+            logger.debug("Sending request to Gemini API")
             response = self.model.generate_content(prompt)
             
             if not response or not response.text:
+                logger.error("Received empty response from Gemini API")
                 raise Exception("No analysis generated")
                 
             return response.text.strip()
             
-        except Exception as e:
-            logger.error(f"Error in AI analysis: {e}")
+        except Exception as exception:
+            logger.error(f"Error in AI analysis: {exception}")
             raise
