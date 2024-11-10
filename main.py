@@ -82,6 +82,18 @@ hide_streamlit_style = """
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+# --- Input Validation ---
+def validate_stock_symbol(symbol):
+    """Validate and clean stock symbol input."""
+    if not symbol:
+        return None
+    # Remove whitespace and convert to uppercase
+    cleaned = symbol.strip().upper()
+    # Check for valid characters (letters, dots, hyphens)
+    if not all(c.isalpha() or c in '.-' for c in cleaned):
+        return None
+    return cleaned
+
 # --- API Configuration ---
 def get_api_key(key_name):
     """Get API key from environment variables."""
@@ -151,7 +163,8 @@ def get_stock_details(symbol):
         return None
 
 def get_historical_data(client, symbol, start_date, end_date, timeframe):
-    if not all([symbol, start_date, end_date, timeframe]):
+    if not symbol or not start_date or not end_date or not timeframe:
+        logger.error("Missing required parameters for historical data fetch")
         return None
         
     try:
@@ -164,18 +177,27 @@ def get_historical_data(client, symbol, start_date, end_date, timeframe):
             "1 Minute": (1, "minute")
         }
         
+        if timeframe not in timeframe_mapping:
+            logger.error(f"Invalid timeframe: {timeframe}")
+            return None
+            
         multiplier, span = timeframe_mapping.get(timeframe, (1, "day"))
         
-        data = list(client.list_aggs(
-            ticker=symbol,
-            multiplier=multiplier,
-            timespan=span,
-            from_=start_date.strftime("%Y-%m-%d"),
-            to=end_date.strftime("%Y-%m-%d"),
-            limit=50000
-        ))
+        try:
+            data = list(client.list_aggs(
+                ticker=symbol,
+                multiplier=multiplier,
+                timespan=span,
+                from_=start_date.strftime("%Y-%m-%d"),
+                to=end_date.strftime("%Y-%m-%d"),
+                limit=50000
+            ))
+        except polygon_exceptions.NoResultsError:
+            logger.error(f"No data found for symbol {symbol}")
+            return None
         
         if not data:
+            logger.warning(f"Empty dataset returned for {symbol}")
             return None
             
         df = pd.DataFrame(data)
@@ -270,15 +292,11 @@ def main():
         
         # Search and Input
         col1, col2 = st.columns(2)
-        with col1:
-            company_name = st.text_input("Enter company name to search for symbol")
-            if st.button("Search Symbol"):
-                if company_name:
-                    symbol = search_stock_symbol(company_name)
-                    if symbol:
-                        st.success(f"Symbol for {company_name}: {symbol}")
-                    else:
-                        st.error(f"Could not find symbol for {company_name}")
+        with col1: 
+            company_name = st.text_input("Enter company name to search for symbol").strip()
+            if company_name and not company_name.replace(' ', '').isalnum():
+                st.warning("Please enter a valid company name (letters and numbers only)")
+                company_name = None
 
         with col2:
             symbol = st.text_input("Enter a stock symbol", "AAPL")
@@ -310,18 +328,30 @@ def main():
         
         # Analysis Button
         if st.button("Analyze Stock"):
-            if not symbol.strip():
+            valid_symbol = validate_stock_symbol(symbol)
+            if not valid_symbol:
                 st.error("Please enter a stock symbol.")
                 return
                 
             with st.spinner("Analyzing stock data..."):
                 try:
                     # Fetch all data
-                    details = get_stock_details(symbol)
-                    historical_data = get_historical_data(polygon_client, symbol, start_date, end_date, timeframe)
-                    greeks = get_option_greeks(symbol)
+                    details = get_stock_details(valid_symbol)
+                    if not details:
+                        st.error(f"Could not fetch stock details for {valid_symbol}")
+                        return
+                        
+                    historical_data = get_historical_data(polygon_client, valid_symbol, start_date, end_date, timeframe)
+                    if historical_data is None or historical_data.empty:
+                        st.error(f"No historical data available for {valid_symbol}")
+                        return
+                        
+                    greeks = get_option_greeks(valid_symbol)
+                    if not greeks:
+                        st.warning("Options data not available - showing limited analysis")
                     
-                    if all([details, historical_data is not None, not historical_data.empty, greeks]):
+                    # Proceed with analysis if we have the minimum required data
+                    if details and not historical_data.empty:
                         # Display results
                         st.subheader("Stock Details")
                         col5, col6, col7, col8 = st.columns(4)
@@ -335,7 +365,7 @@ def main():
                             st.metric("Exchange", details.get('exchange', 'N/A'))
                         
                         st.subheader("Historical Data Analysis")
-                        fig = create_combined_chart(historical_data, symbol)
+                        fig = create_combined_chart(historical_data, valid_symbol)
                         st.plotly_chart(fig, use_container_width=True)
                         
                         col9, col10 = st.columns(2)
@@ -355,7 +385,7 @@ def main():
                             with st.spinner("Generating AI analysis..."):
                                 try:
                                     ai_analysis = ai_analyst.analyze_stock(
-                                        symbol,
+                                        valid_symbol,
                                         details,
                                         historical_data,
                                         greeks
@@ -376,7 +406,7 @@ def main():
                         st.download_button(
                             label="Download Historical Data as CSV",
                             data=csv,
-                            file_name=f"{symbol}_historical_data.csv",
+                            file_name=f"{valid_symbol}_historical_data.csv",
                             mime="text/csv",
                         )
                     else:
